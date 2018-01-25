@@ -1,4 +1,5 @@
 import { Component, OnInit, AfterViewInit } from '@angular/core';
+import { ActivatedRoute, Router} from '@angular/router';
 import { GeneralDataService } from 'app/general-data.service';
 
 @Component({
@@ -7,31 +8,6 @@ import { GeneralDataService } from 'app/general-data.service';
   styleUrls: ['./dashboard.component.scss']
 })
 export class DashboardComponent implements OnInit, AfterViewInit {
-
-  constructor(
-    private dataService: GeneralDataService
-  ) { }
-
-  ngOnInit() {
-    this.dataService.preloadData();
-
-  }
-
-  ngAfterViewInit() {
-    this.focusSearch();
-  }
-
-  focusSearch() {
-    (<HTMLInputElement>document.getElementById('searchInput')).select();
-  }
-
-  setFocus(evt) {
-    if(evt.type === 'focus') {
-      evt.target.parentNode.classList.add('active');
-    } else {
-      evt.target.parentNode.classList.remove('active');
-    }
-  }
 
   public query : string = '';
   public allResults;
@@ -44,11 +20,63 @@ export class DashboardComponent implements OnInit, AfterViewInit {
   public less = false;
   public none = false;
   public loading = false;
+  private preload;
+
+  constructor(
+    private dataService: GeneralDataService,
+    private $route: ActivatedRoute,
+    private $router: Router
+  ) { }
+
+  ngOnInit() {
+    this.preload = this.dataService.preloadData(['locations', 'locationtypes', 'verifiableorgtypes']);
+    this.$route.queryParams.subscribe(params => {
+      this.setQuery(params.query);
+    });
+  }
+
+  ngAfterViewInit() {
+    (<HTMLInputElement>document.getElementById('searchInput')).value = this.query;
+    this.focusSearch();
+  }
+
+  setQuery(q) {
+    if(typeof q !== 'string') q = '';
+    if(this.query !== q) {
+      this.query = q;
+      var search = (<HTMLInputElement>document.getElementById('searchInput'));
+      if(search) search.value = this.query;
+      this.preload.then(data => this.search());
+    }
+  }
+
+  focusSearch() {
+    (<HTMLInputElement>document.getElementById('searchInput')).select();
+  }
+
+  inputEvent(evt) {
+    if(evt.type === 'focus') {
+      evt.target.parentNode.classList.add('active');
+    } else if(evt.type === 'blur') {
+      evt.target.parentNode.classList.remove('active');
+    } else if(evt.type === 'input') {
+      this.updateSearch(evt);
+    }
+  }
 
   updateSearch(evt) {
-    this.query = evt.target.value;
+    let q = evt.target.value;
+    let navParams = { queryParams: {}, relativeTo: this.$route };
+    if(q !== undefined && q !== null) {
+      q = q.trim();
+      if(q !== '') {
+        navParams.queryParams['query'] = q;
+      }
+    }
     if (this.searchTimer) clearTimeout(this.searchTimer);
-    this.searchTimer = setTimeout(() => this.search(), 150);
+    this.searchTimer = setTimeout(() => {
+      this.$router.navigate(['./'], navParams);
+    }, 150);
   }
 
   search(setType? : string) {
@@ -60,11 +88,12 @@ export class DashboardComponent implements OnInit, AfterViewInit {
     if(q.length) {
       let srch;
       if(this.searchType === 'name') {
-        srch = this.sub = this.dataService.searchOrgs(this.query);
+        srch = this.sub = this.dataService.searchOrgs(q);
       } else {
-        srch = this.sub = this.dataService.searchLocs(this.query);
+        srch = this.sub = this.dataService.searchLocs(q);
       }
       this.sub.then(data => this.returnSearch(data, srch));
+      this.sub.catch(err => this.searchError(err));
     } else {
       this.sub = null;
       this.returnSearch([], this.sub);
@@ -88,6 +117,11 @@ export class DashboardComponent implements OnInit, AfterViewInit {
     this.loading = false;
   }
 
+  searchError(err) {
+    console.error(err);
+    this.returnSearch([], this.sub);
+  }
+
   paginate() {
     let rows = this.allResults || [];
     this.results = rows.slice(this.page * 10, (this.page + 1) * 10);
@@ -104,6 +138,14 @@ export class DashboardComponent implements OnInit, AfterViewInit {
   next() {
     this.page ++;
     this.paginate();
+  }
+
+  orgCount() {
+    return this.dataService.getRecordCount('verifiableorgs');
+  }
+
+  claimCount() {
+    return this.dataService.getRecordCount('verifiableclaims');
   }
 
 }

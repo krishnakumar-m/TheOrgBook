@@ -1,6 +1,8 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { GeneralDataService } from 'app/general-data.service';
 import { ActivatedRoute } from '@angular/router';
+import { Location, LocationType, VerifiableOrg, VerifiableOrgType, IssuerService, VerifiableClaim, VerifiableClaimType, DoingBusinessAs,
+  blankLocation, blankOrgType, blankLocationType, blankIssuerService, blankClaimType } from '../data-types';
 
 @Component({
   selector: 'app-business',
@@ -10,11 +12,11 @@ import { ActivatedRoute } from '@angular/router';
 export class BusinessComponent implements OnInit, OnDestroy {
   id: number;
   loaded: boolean;
-  record: any;
+  record: VerifiableOrg;
   loc: any;
-  dbas: any[];
+  dbas: DoingBusinessAs[];
   certs: any[];
-  locations: any[];
+  locations: Location[];
   error: string;
   sub: any;
 
@@ -23,64 +25,53 @@ export class BusinessComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute) { }
 
   ngOnInit() {
-    let loaded = this.dataService.preloadData(['verifiableclaimtypes', 'verifiableorgtypes', 'locationtypes']);
+    let loaded = this.dataService.preloadData(['verifiableclaimtypes', 'verifiableorgtypes', 'locationtypes', 'issuerservices']);
     this.sub = this.route.params.subscribe(params => {
       this.id = +params['recordId'];
       loaded.then(status => {
-        this.dataService.loadVerifiedOrg(this.id).subscribe(record => {
+        this.dataService.loadVerifiableOrg(this.id).subscribe((record : VerifiableOrg) => {
           this.record = record;
           console.log('verified org:', record);
           this.loaded = !!record;
           if(! record) this.error = 'Record not found';
           else {
-            let orgType = this.dataService.findOrgData('verifiableorgtypes', record.orgTypeId);
-            this.record.type = orgType || {};
+            let orgType = <VerifiableOrgType>this.dataService.findOrgData('verifiableorgtypes', record.orgTypeId);
+            this.record.type = orgType || blankOrgType();
             this.record.typeName = orgType && orgType.description;
 
-            let locs = [];
-            if(Array.isArray(record.locations)) {
+            let orgLocs = [];
+            let claimLocs = {};
+            if(record.locations) {
               for(var i = 0; i < record.locations.length; i++) {
-                let loc = Object.assign({}, record.locations[i]);
-                let locType = this.dataService.findOrgData('locationtypes', loc.locationTypeId);
-                loc.type = locType || {};
+                let loc = <Location>Object.assign({}, record.locations[i]);
+                let locType = <LocationType>this.dataService.findOrgData('locationtypes', loc.locationTypeId);
+                loc.type = locType || blankLocationType();
                 loc.typeName = locType && locType.locType;
-                locs.push(loc);
+                if(loc.doingBusinessAsId) {
+                  let cid = loc.doingBusinessAsId;
+                  if(! claimLocs[cid]) claimLocs[cid] = [];
+                  claimLocs[cid].push(loc);
+                } else {
+                  orgLocs.push(loc);
+                }
               }
             }
-            this.locations = locs;
-            console.log('locations', locs);
+            this.locations = orgLocs;
+            console.log('locations', orgLocs);
 
             let dbas = [];
             if(Array.isArray(record.doingBusinessAs)) {
               for(var i = 0; i < record.doingBusinessAs.length; i++) {
-                let dba = Object.assign({}, record.doingBusinessAs[i]);
-                dbas.push(dba.DBA);
+                let dba = <DoingBusinessAs>Object.assign({}, record.doingBusinessAs[i]);
+                dba.locations = claimLocs[dba.id] || [];
+                dbas.push(dba);
               }
             }
             this.dbas = dbas;
             console.log('dbas', dbas);
 
-            let certs = [];
-            if(Array.isArray(record.claims)) {
-              let seen = {};
-              for(var i = 0; i < record.claims.length; i++) {
-                let cert = Object.assign({}, record.claims[i]);
-                let grp = seen[cert.claimType];
-                if(! grp) {
-                  grp = seen[cert.claimType] = {others: []};
-                  grp.type = this.dataService.findOrgData('verifiableclaimtypes', cert.claimType);
-                  grp.typeName = grp.type ? grp.type.claimType : '';
-                  grp.color = ['green', 'orange', 'blue', 'purple'][cert.claimType % 4];
-                  grp.top = cert;
-                  certs.push(grp);
-                } else {
-                  grp.others.push(cert);
-                }
-              }
-              certs.sort((a,b) => a.typeName.localeCompare(b.typeName));
-            }
-            this.certs = certs;
-            console.log('claims', certs);
+            this.certs = this.dataService.formatClaims(record.claims);
+            console.log('claims', this.certs);
 
             /*this.dataService.loadFromApi('verifiableorgs/' + this.id + '/voclaims')
               .subscribe((res: any) => {

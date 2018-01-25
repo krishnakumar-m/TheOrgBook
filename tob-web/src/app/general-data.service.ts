@@ -2,7 +2,9 @@ import { Injectable } from '@angular/core';
 import { Http, Response } from '@angular/http';
 import { Observable } from 'rxjs/Observable';
 import { MockData } from './mock-data';
-import { VerifiedOrg } from './data-types';
+import {
+    VerifiableOrg, VerifiableOrgType, VerifiableClaim, VerifiableClaimType, IssuerService, Jurisdiction,
+    blankOrgType, blankClaimType, blankIssuerService, blankJurisdiction } from './data-types';
 import { environment } from '../environments/environment';
 import 'rxjs/add/operator/map';
 import 'rxjs/add/operator/catch';
@@ -37,7 +39,7 @@ export class GeneralDataService {
     }
   }
 
-  loadRecord(moduleId: string, recordId: string): Observable<any> {
+  loadRecord(moduleId: string, recordId: string): Observable<Object> {
     let ret = this.loadFromApi(moduleId + '/' + recordId);
     if(! ret) {
       ret = Observable.create((obs) => {
@@ -49,15 +51,16 @@ export class GeneralDataService {
     return ret;
   }
 
-  loadVerifiedOrg(recordId): Observable<any> { // Observable<VerifiedOrg> {
+  loadVerifiableOrg(recordId): Observable<VerifiableOrg> {
     return this.loadRecord('verifiableorgs', recordId)
       .map((res: Object) => {
-        let row : {[key:string]: any} = res; // <VerifiedOrg>res;
+        let row = <VerifiableOrg>res;
         /*let locs = this.getOrgData('locations');
         if(locs) {
           console.log('locs', locs);
           for (let j = 0; j < locs.length; j++) {
-            if (locs[j].verifiableOrgId === row.id && locs[j].locationTypeId === 1) {
+            let loc = <Location>locs[j];
+            if (loc.verifiableOrgId === row.id && loc.locationTypeId === 1) {
               row.primaryLocation = locs[j];
             }
           }
@@ -65,7 +68,14 @@ export class GeneralDataService {
         if(! row.primaryLocation) {
           row.primaryLocation = (new MockData()).fetchRecord('verifiableorgs', 1).primaryLocation;
         }*/
-        row.type = {};
+        row.type = {
+          id: 0,
+          orgType: '',
+          description: '',
+          effectiveDate: '',
+          endDate: '',
+          displayOrder: 0,
+        };
         return row;
       });
   }
@@ -73,13 +83,55 @@ export class GeneralDataService {
   // -- client-side search implementation --
 
   private orgData : {[key: string]: any} = {};
+  private quickLoaded = false;
+  private recordCounts : {[key: string]: number} = {};
 
-  preloadData(reqTypes?) {
+  quickLoad(force?) {
     return new Promise(resolve => {
+      if(this.quickLoaded && !force) {
+        resolve(1);
+        return;
+      }
       let baseurl = this.getRequestUrl('');
       console.log('base url: ' + baseurl);
-      if(! baseurl) return;
-      let types = reqTypes || ['verifiableorgtypes', 'locationtypes', 'jurisdictions', 'locations'];
+      if(! baseurl) {
+        resolve(0);
+        return;
+      }
+      let req = this.http.get(baseurl + 'quickload')
+        .map((res: Response) => res.json())
+        .catch(error => {
+          console.error(error);
+          resolve(1);
+          return Observable.throw(error);
+        });
+      req.subscribe(data => {
+        console.log('quickload', data);
+        if(data.counts) {
+          for (let k in data.counts) {
+            this.recordCounts[k] = parseInt(data.counts[k]);
+          }
+        }
+        if(data.records) {
+          for (let k in data.records) {
+            this.orgData[k] = data.records[k];
+          }
+        }
+        this.quickLoaded = true;
+        resolve(1);
+      });
+    });
+  }
+
+  preloadData(reqTypes?) {
+    return this.quickLoad().then(response => new Promise(resolve => {
+      let baseurl = this.getRequestUrl('');
+      console.log('base url: ' + baseurl);
+      if(! baseurl) {
+        resolve(0);
+        return;
+      }
+      let types = reqTypes || ['issuerservices', 'jurisdictions', 'locationtypes', 'verifiableclaimtypes', 'verifiableorgtypes'];
       let wait = 0;
       for (let i = 0; i < types.length; i++) {
         let type = types[i];
@@ -99,10 +151,10 @@ export class GeneralDataService {
         });
       }
       if(! wait) resolve(0);
-    });
+    }));
   }
 
-  findOrgData (type, id) {
+  findOrgData (type, id) : Object {
     if (this.orgData[type]) {
       for (let i = 0; i < this.orgData[type].length; i++) {
         if (this.orgData[type][i].id === id) {
@@ -112,7 +164,11 @@ export class GeneralDataService {
     }
   }
 
-  getOrgData (type) {
+  getRecordCount (type) {
+    return this.recordCounts[type] || 0;
+  }
+
+  getOrgData (type) : {[key:string]: Object} {
     return this.orgData[type];
   }
 
@@ -126,8 +182,8 @@ export class GeneralDataService {
   searchOrgs (query: string) {
     let adj = (org) => {
       let locs = this.orgData.locations;
-      org.jurisdiction = this.findOrgData('jurisdictions', org.jurisdictionId) || {};
-      org.type = this.findOrgData('verifiableorgtypes', org.orgTypeId) || {};
+      org.jurisdiction = <Jurisdiction>this.findOrgData('jurisdictions', org.jurisdictionId) || blankJurisdiction();
+      org.type = <VerifiableOrgType>this.findOrgData('verifiableorgtypes', org.orgTypeId) || blankOrgType();
       org.primaryLocation = {summary: '', street: ''};
       if (locs) {
         for (let j = 0; j < locs.length; j++) {
@@ -169,6 +225,40 @@ export class GeneralDataService {
         resolve(orgs);
       });
     });
+  }
+
+  formatClaim(claim : VerifiableClaim) {
+    let type = <VerifiableClaimType>this.findOrgData('verifiableclaimtypes', claim.claimType);
+    claim.type = type || blankClaimType();
+    claim.typeName = type.claimType || '';
+    claim.color = ['green', 'orange', 'blue', 'purple'][claim.claimType % 4];
+    let issuer = <IssuerService>this.findOrgData('issuerservices', type.issuerServiceId);
+    claim.issuer = issuer || blankIssuerService();
+    return claim;
+  }
+
+  formatClaims(claims) {
+    if (!claims) claims = [];
+    let result = [];
+    let seen = {};
+    let sorted = this.sortClaims(claims);
+    for(var i = 0; i < sorted.length; i++) {
+      let claim = <VerifiableClaim>Object.assign({}, sorted[i]);
+      let grp = seen[claim.claimType];
+      if(! grp) {
+        grp = seen[claim.claimType] = {others: []};
+        grp.top = this.formatClaim(claim);
+        result.push(grp);
+      } else {
+        grp.others.push(claim);
+      }
+    }
+    return result;
+  }
+
+  sortClaims(claims) {
+    let base = (claims || []).slice();
+    return base.sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
   }
 
 }

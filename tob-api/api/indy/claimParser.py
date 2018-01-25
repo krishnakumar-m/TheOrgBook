@@ -1,41 +1,39 @@
 import json
+import logging
 
 class ClaimParser(object):
     """
-    description of class
+    Parses a generic claim.
     """
     def __init__(self, claim: str) -> None:
-        """
-        Initializer
-        """
-        self._raw_claim = claim
-        self.__parse()
-
-    @property
-    def raw_claim(self) -> str:
-        return self._raw_claim
-
-    @property
-    def claim(self) -> str:
-        return self._claim
-
-    @property
-    def issuer_did(self) -> str:
-        return self._issuer_did
+      self.__logger = logging.getLogger(__name__)
+      self.__orgData = claim
+      self.__parse()
 
     def __parse(self):
-      data = json.loads(self.raw_claim)
-      self._issuer_did = data["issuer_did"]
-      self._claim = self.__parseClaim(data)
+      self.__logger.debug("Parsing claim ...")
+      data = json.loads(self.__orgData)
+      self.__claim_type = data["claim_type"]
+      self.__claim = data["claim_data"]
+      self.__issuer_did = data["claim_data"]["issuer_did"]
+    
+    def getField(self, field):
+      value = None
+      try:
+        value = self.__claim["claim"][field][0]
+      except:
+        pass
 
-    def __parseClaim(self, data):
-      return {
-        "effectiveDate": data["claim"]["effectiveDate"][0],
-        "orgTypeId": data["claim"]["orgTypeId"][0],
-        "endDate": data["claim"]["endDate"][0],
-        "jurisdictionId": data["claim"]["jurisdictionId"][0],
-        "LegalName": data["claim"]["LegalName"][0],
-        "busId": data["claim"]["busId"][0]
-      }
-      
+      return value
 
+    @property
+    def schemaName(self) -> str:
+        return self.__claim_type
+
+    @property
+    def issuerDid(self) -> str:
+        return self.__issuer_did
+
+    @property
+    def json(self) -> str:
+        return json.dumps(self.__claim)

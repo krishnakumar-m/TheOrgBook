@@ -20,11 +20,13 @@
 """
 
 import asyncio
+from api.claimDefProcesser import ClaimDefProcesser
+from api.proofRequestProcesser import ProofRequestProcesser
+from api.indy.claimDefParser import ClaimDefParser
+from api.claimProcesser import ClaimProcesser
 import json
 import os
 import random
-
-from .indy.agent import Agent
 
 from django.views.decorators.csrf import csrf_exempt
 
@@ -1067,52 +1069,3 @@ class verifiableorgtypesIdGet(AuditableMixin,mixins.RetrieveModelMixin, mixins.U
     Updates the specified VerifiableOrgType object
     """
     return self.update(request, *args, **kwargs)
-
-@csrf_exempt
-def bcovrinGenerateClaimRequest(request):
-
-  orgbook = Agent()
-
-  async def do():
-    body_unicode = request.body.decode('utf-8')
-    request_json = json.loads(body_unicode)
-    did = request_json['did']
-    seqNo = request_json['seqNo']
-    claim_def_json = request_json['claim_def']
-
-    print("\n\nStoring claim offer...\n\n")
-
-    await orgbook.store_claim_offer(did, seqNo)
-
-    print("\n\nGenerating claim request...\n\n")
-
-    claim_req_json = await orgbook.store_claim_req(did, claim_def_json)
-    return claim_req_json
-
-  loop = asyncio.get_event_loop()
-  resp = loop.run_until_complete(do())
-
-
-  print("=-==-\n\n\n")
-  print(resp)
-
-  return JsonResponse(json.loads(resp))
-
-
-@csrf_exempt
-def bcovrinStoreClaim(request):
-
-  orgbook = Agent()
-
-  async def do():
-    claim = request.body.decode('utf-8')
-    claimProcesser = ClaimProcesser()
-    claimProcesser.SaveClaim(claim)    
-    await orgbook.store_claim(claim)
-
-  loop = asyncio.get_event_loop()
-  loop.run_until_complete(do())
-
-  print("\n\nStoring claim\n\n")
-
-  return JsonResponse({"success": True})
