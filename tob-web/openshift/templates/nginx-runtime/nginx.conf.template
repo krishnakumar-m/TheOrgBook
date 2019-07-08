@@ -24,7 +24,8 @@ http {
     # Use a w3c standard log format
     log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
                       '$status $body_bytes_sent "$http_referer" '
-                      '"$http_user_agent" "$http_x_forwarded_for"';
+                      '"$http_user_agent" "$http_x_forwarded_for" '
+                      'rt=$request_time urt=$upstream_response_time $pipe';
 
     access_log  /var/log/nginx/access.log  main if=$loggable;
 
@@ -54,6 +55,16 @@ http {
     # HTTP Basic rules
     auth_basic_user_file /tmp/.htpasswd;
 
+    # Set variable for API proxy
+    map $http_x_forwarded_proto $proxy_scheme {
+        default $scheme;
+        https "https";
+    }
+    map $http_x_forwarded_port $proxy_port {
+        default $http_x_forwarded_port;
+        '' $server_port;
+    }
+
     server {
         listen       8080;
         server_name  localhost;
@@ -65,13 +76,15 @@ http {
         add_header X-XSS-Protection 1;
         add_header X-Frame-Options DENY;
 
+        %REMOVE_BASE_HREF%
+
         %API_CONFIG_SECTION%
 
         # serve our angular app here
         location / {
             root   /tmp/app/dist;
             index  index.html index.htm;
-            try_files $uri /index.html;
+            try_files $uri $uri/ /index.html =404;
             gzip            on;
             gzip_min_length 1000;
             gzip_types      *;
@@ -82,7 +95,7 @@ http {
 
         # redirect server error pages to the static page /50x.html
         error_page   500 502 503 504  /50x.html;
-        location = /50x.html {
+        location = 50x.html {
             root   /usr/share/nginx/html;
         }
 
@@ -101,5 +114,12 @@ http {
             access_log off;
         }
 
+        # serve the fathom analytics tracking code, if available
+        location =/fathom.js {
+            root /tmp;
+            gzip            on;
+            gzip_min_length 1000;
+            gzip_types      *;
+        }
     }
 }

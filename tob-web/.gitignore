@@ -2,6 +2,8 @@
 
 # local config
 .env
+# precompiled theme
+/src/themes/_active/
 
 # compiled output
 /dist
@@ -32,7 +34,9 @@
 /connect.lock
 /coverage
 /libpeerconnection.log
+package-lock.json
 npm-debug.log
+.npm
 testem.log
 /typings
 

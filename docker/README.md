@@ -10,58 +10,57 @@ All application services are exposed to the host so they may be easily accessed 
   * Install and configure Docker and Docker compose for your system.
 * The S2I CLI
   * Download and install the S2I CLI tool; [source-to-image](https://github.com/openshift/source-to-image)
-  * Make sure it is avaialble on your `PATH`.  The `manage.sh` will look for the `s2i` executable on your `PATH`.  If it is not found you will get a message asking you to download and set it on your `PATH`.
+  * Make sure it is available on your `PATH`.  The `manage` will look for the `s2i` executable on your `PATH`.  If it is not found you will get a message asking you to download and set it on your `PATH`.
 
 ## Management Script
 
-The `manage.sh` script wraps the Docker and S2I process in easy to use commands.
+The `manage` script wraps the Docker and S2I process in easy to use commands.
 
 To get full usage information on the script run:
-```
-./manage.sh -h
+
+```sh
+./manage
 ```
   
 ## Building the Images
 
-The first thing you'll need to do is build the Docker images.  Since this requires a combination of Docker and S2I builds the process has been scripted inside `manage.sh`.  _The `docker-compose.yml` file does not perform any of the builds._
+The first thing you'll need to do is build the Docker images.  Since this requires a combination of Docker and S2I builds the process has been scripted inside `manage`.  _The `docker-compose.yml` file does not perform any of the builds._
 
 To build the images run:
+```sh
+./manage build
 ```
-./manage.sh build
-```
-
-### Troubleshooting the Building
-
-If you get errors during the build that reference scripts such as the following, check the line endings of your local copy of the file.  Replace `CRLF` line endings with `LF` and rebuild the image.
-
-The `.gitattributes` file for the project has been updated, but if your local copy predates the update, your files may still be affected.
-
-```
-/bin/sh: 1: /usr/libexec/s2i/assemble-runtime: not found
-error: Execution of post execute step failed
-Build failed
-ERROR: An error occurred: non-zero (13) exit code from angular-builder
-```
-
-In this example search your working copy for all instances of `assemble-runtime`.
 
 ## Starting the Project
 
 To start the project run:
-```
-./manage.sh start
+
+You will need to choose a unique seed value for development. Use a value that no one else is using. It must be 32 characters long exactly.
+
+
+```sh
+./manage start seed=my_unique_seed_00000000000000000
 ```
 
 This will start the project interactively; with all of the logs being written to the command line.
 
+Each seed must be authorized on the Indy ledger. If you are running the VON Network component locally, then DID registration is automatic. If using a shared Indy ledger then you will need to request authorization.
+
+
 ## Stopping the Project
 
-To stop the project run:
+There are two commands to stop the project run:
+
+```sh
+./manage stop
 ```
-./manage.sh stop
+and
+
+```sh
+./manage down
 ```
 
-This will shutdown all of the containers in the project.
+`stop` merely stops the containers, but leaves the rest of the `docker-compose` structure in place - volumes (and the Indy wallets they store) and networking.  `down` is destructive, removing the volumes and network elements. Often in a debugging session, `stop` is sufficient. If you use down, you likely will have to restart the prerequisite Indy network.
 
 ## Using the Application
 
@@ -74,11 +73,23 @@ This will shutdown all of the containers in the project.
 ## Loading Data
 
 To load sample data into the running application use the `loadData.sh` script:
-```
+```sh
 ../openshift/loadData.sh -e http://localhost:8081
 ```
 
 This will load sample data directly into the exposed REST API.
+
+# Running a Complete VON Network
+
+A quick start guide for running a local Indy Network, an instance of TheOrgBook and the GreenLight issuer verifiers can be found in this [VON Network Quick Start Guide](https://github.com/bcgov/greenlight/blob/master/docker/VONQuickStartGuide.md).
+
+### Live Web Development
+
+TheOrgBook can also be brought up in a state where local modifications to the tob-web component are detected automatically, resulting in recompilation of the Javascript and CSS resources and a page reload when viewed in a web browser. To run TheOrgBook using this method execute:
+
+```sh
+./manage web-dev
+```
 
 # Current State
 
